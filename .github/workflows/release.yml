@@ -53,7 +53,11 @@ jobs:
             echo "서명 키(KEYSTORE_B64)가 Secrets에 없습니다." | tee build.log
             exit 1
           fi
-          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          if ! printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n\t' | base64 -d > "$RUNNER_TEMP/release.jks" 2>/dev/null; then
+            echo "서명 키(KEYSTORE_B64) 값이 올바르지 않습니다. (길이: ${#KEYSTORE_B64})" | tee build.log
+            exit 1
+          fi
+          echo "서명 키 크기: $(stat -c%s "$RUNNER_TEMP/release.jks") bytes"
 
       - name: 빌드
         if: steps.ver.outputs.skip != '1'
@@ -86,5 +90,8 @@ jobs:
           git init -q
           tail -n 400 "$GITHUB_WORKSPACE/build.log" > build.log 2>/dev/null || echo "로그 없음" > build.log
           echo "$(cat $GITHUB_WORKSPACE/version.txt) $GITHUB_SHA" > ref.txt
+          cat > steps.json <<'JSON'
+          ${{ toJSON(steps) }}
+          JSON
           git add . && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "build log"
           git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:ci-logs
