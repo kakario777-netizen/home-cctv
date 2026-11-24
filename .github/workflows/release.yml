@@ -1,9 +1,11 @@
 name: release
 
-# 태그(v*)를 올릴 때만 빌드한다. 외부 풀 리퀘스트로는 실행되지 않는다(pull_request 트리거 없음).
+# version.txt를 올려서 버전이 바뀔 때만 빌드·릴리스한다.
+# 외부 풀 리퀘스트로는 실행되지 않는다(pull_request 트리거 없음).
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths: ['version.txt']
   workflow_dispatch:
 
 permissions:
@@ -21,16 +23,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: 버전 확인
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="$(tr -d ' \r\n' < version.txt)"
+          echo "tag=v$VER" >> "$GITHUB_OUTPUT"
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+          if gh release view "v$VER" >/dev/null 2>&1; then echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+
       - uses: actions/setup-java@v4
+        if: steps.ver.outputs.skip != '1'
         with:
           distribution: temurin
           java-version: '17'
 
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.ver.outputs.skip != '1'
         with:
           gradle-version: '8.7'
 
       - name: 서명 키 준비
+        if: steps.ver.outputs.skip != '1'
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
         run: |
@@ -41,24 +56,26 @@ jobs:
           echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
 
       - name: 빌드
+        if: steps.ver.outputs.skip != '1'
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          VER="${GITHUB_REF_NAME#v}"
-          case "$VER" in [0-9]*) ;; *) VER="0.0.1" ;; esac
+          VER="${{ steps.ver.outputs.ver }}"
+          TAG="${{ steps.ver.outputs.tag }}"
           set -o pipefail
           gradle :app:assembleRelease -PversionName="$VER" --no-daemon --stacktrace 2>&1 | tee build.log
-          cp app/build/outputs/apk/release/app-release.apk "home-cctv-$GITHUB_REF_NAME.apk"
+          cp app/build/outputs/apk/release/app-release.apk "home-cctv-$TAG.apk"
 
       - name: 릴리스 올리기
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: steps.ver.outputs.skip != '1'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          NOTES="$(cat release-notes.md 2>/dev/null || echo "홈 CCTV $GITHUB_REF_NAME")"
-          gh release create "$GITHUB_REF_NAME" "home-cctv-$GITHUB_REF_NAME.apk" --title "홈 CCTV $GITHUB_REF_NAME" --notes "$NOTES" \
-            || gh release upload "$GITHUB_REF_NAME" "home-cctv-$GITHUB_REF_NAME.apk" --clobber
+          NOTES="$(cat release-notes.md 2>/dev/null || echo "홈 CCTV $TAG")"
+          gh release create "$TAG" "home-cctv-$TAG.apk" --target "$GITHUB_SHA" --title "홈 CCTV $TAG" --notes "$NOTES" \
+            || gh release upload "$TAG" "home-cctv-$TAG.apk" --clobber
 
       - name: 실패 로그 저장 (ci-logs 브랜치)
         if: failure()
@@ -68,6 +85,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/log" && cd "$RUNNER_TEMP/log"
           git init -q
           tail -n 400 "$GITHUB_WORKSPACE/build.log" > build.log 2>/dev/null || echo "로그 없음" > build.log
-          echo "$GITHUB_REF_NAME $GITHUB_SHA" > ref.txt
-          git add . && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "build log $GITHUB_REF_NAME"
+          echo "$(cat $GITHUB_WORKSPACE/version.txt) $GITHUB_SHA" > ref.txt
+          git add . && git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "build log"
           git push -qf "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:ci-logs
