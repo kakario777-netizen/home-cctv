@@ -40,6 +40,9 @@ object Prefs {
     var cameraName: String?
         get() = p().getString("cam_name", null)
         set(v) = p().edit().putString("cam_name", v).apply()
+    var viewerMuted: Boolean
+        get() = p().getBoolean("viewer_muted", false)
+        set(v) = p().edit().putBoolean("viewer_muted", v).apply()
     var cameraRunning: Boolean
         get() = p().getBoolean("cam_running", false)
         set(v) = p().edit().putBoolean("cam_running", v).apply()

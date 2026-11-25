@@ -27,6 +27,8 @@ class ViewerActivity : Activity() {
     private var renderer: SurfaceViewRenderer? = null
     private var micTrack: AudioTrack? = null
     private var micSource: AudioSource? = null
+    private var remoteAudio: AudioTrack? = null
+    private var muteBtn: Button? = null
     private var answerListener: Rtdb.Listener? = null
     private var camId: String? = null
     private var statusView: TextView? = null
@@ -98,20 +100,39 @@ class ViewerActivity : Activity() {
         talk.setOnTouchListener { _, ev ->
             when (ev.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    if (hasMic()) { micTrack?.setEnabled(true); talk.text = "말하는 중..." }
+                    if (hasMic()) { if (Prefs.viewerMuted) speaker(true); micTrack?.setEnabled(true); talk.text = "말하는 중..." }
                     else if (Build.VERSION.SDK_INT >= 23) requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 2)
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { micTrack?.setEnabled(false); talk.text = "누르고 말하기" }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    micTrack?.setEnabled(false); talk.text = "누르고 말하기"
+                    if (Prefs.viewerMuted) speaker(false)
+                }
             }
             false
         }
         val hang = Button(this).apply { text = "끊기"; setOnClickListener { hangup(); showList() } }
+        val mute = Button(this).apply { setOnClickListener { setMuted(!Prefs.viewerMuted) } }
+        muteBtn = mute
+        updateMuteText()
+        bar.addView(mute, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         bar.addView(talk, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f))
         bar.addView(hang, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM))
         setContentView(root)
 
         Thread { connect(id, name, r) }.start()
+    }
+
+    /** 카메라 쪽 소리만 끄고 켠다. 화면은 그대로 보임. 선택은 다음 접속에도 유지 */
+    private fun setMuted(muted: Boolean) {
+        Prefs.viewerMuted = muted
+        remoteAudio?.setEnabled(!muted)
+        speaker(!muted)
+        updateMuteText()
+    }
+
+    private fun updateMuteText() {
+        muteBtn?.text = if (Prefs.viewerMuted) "소리 켜기" else "소리 끄기"
     }
 
     private fun hasMic() = Build.VERSION.SDK_INT < 23 ||
@@ -143,8 +164,9 @@ class ViewerActivity : Activity() {
             val mic = Rtc.factory.createAudioTrack("view_mic", micSource)
             mic.setEnabled(false)
             micTrack = mic
-            conn.addTransceiver(mic, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV))
-            speaker(true)
+            val audio = conn.addTransceiver(mic, RtpTransceiver.RtpTransceiverInit(RtpTransceiver.RtpTransceiverDirection.SEND_RECV))
+            remoteAudio = audio.receiver.track() as? AudioTrack
+            runOnUiThread { setMuted(Prefs.viewerMuted) }
 
             Rtc.setLocal(conn, Rtc.createOffer(conn))
             val offer = Rtc.gatheredLocal(conn)
@@ -186,7 +208,7 @@ class ViewerActivity : Activity() {
         val r = renderer
         val mt = micTrack
         val ms = micSource
-        pc = null; renderer = null; micTrack = null; micSource = null
+        pc = null; renderer = null; micTrack = null; micSource = null; remoteAudio = null; muteBtn = null
         val id = camId
         Thread {
             try { p?.dispose() } catch (_: Exception) {}
