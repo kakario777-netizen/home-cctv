@@ -85,12 +85,17 @@ object Rtc {
         val o = Sdp(); pc.setRemoteDescription(o, sdp); o.await()
     }
 
-    /** 주소 후보를 다 모은 뒤 SDP를 한 번에 주고받는다 (신호 횟수 최소화). */
-    fun gatheredLocal(pc: PeerConnection, timeoutMs: Long = 6000): SessionDescription {
-        val end = System.currentTimeMillis() + timeoutMs
-        while (pc.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE &&
-            System.currentTimeMillis() < end
-        ) Thread.sleep(100)
+    /** 외부 주소(srflx)를 하나 얻으면 바로 보낸다. 다 모일 때까지 기다리지 않아 접속이 빨라진다. */
+    fun gatheredLocal(pc: PeerConnection, timeoutMs: Long = 2500): SessionDescription {
+        val start = System.currentTimeMillis()
+        while (true) {
+            if (pc.iceGatheringState() == PeerConnection.IceGatheringState.COMPLETE) break
+            val elapsed = System.currentTimeMillis() - start
+            if (elapsed >= timeoutMs) break
+            val sdp = pc.localDescription?.description ?: ""
+            if (elapsed >= 300 && "typ srflx" in sdp) break
+            Thread.sleep(40)
+        }
         return pc.localDescription
     }
 

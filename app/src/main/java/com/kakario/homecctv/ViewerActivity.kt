@@ -150,7 +150,6 @@ class ViewerActivity : Activity() {
             val offer = Rtc.gatheredLocal(conn)
             if (closed) return
             val sid = UUID.randomUUID().toString()
-            Rtdb.put("calls/$id", JSONObject().put("sid", sid).put("offer", Rtc.toJson(offer)))
 
             var applied = false
             answerListener = Rtdb.Listener("calls/$id") {
@@ -161,6 +160,7 @@ class ViewerActivity : Activity() {
                 applied = true
                 Rtc.setRemote(conn, Rtc.fromJson(ans))
             }.start()
+            Rtdb.put("calls/$id", JSONObject().put("sid", sid).put("offer", Rtc.toJson(offer)))
 
             Thread.sleep(20_000)
             if (!applied && !closed) setStatus("$name 응답이 없어요. 카메라 폰이 켜져 있는지 확인해 주세요.")

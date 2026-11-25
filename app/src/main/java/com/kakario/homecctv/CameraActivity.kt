@@ -2,7 +2,11 @@ package com.kakario.homecctv
 
 import android.Manifest
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -67,5 +71,16 @@ class CameraActivity : Activity() {
 
     private fun startCamera() {
         CameraService.start(this)
+        askBatteryExemption()
+    }
+
+    /** 화면이 꺼져도 접속 신호를 바로 받도록 배터리 절약 예외를 한 번 요청 */
+    private fun askBatteryExemption() {
+        if (Build.VERSION.SDK_INT < 23) return
+        val pm = getSystemService(POWER_SERVICE) as PowerManager
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        try {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+        } catch (_: Exception) {}
     }
 }

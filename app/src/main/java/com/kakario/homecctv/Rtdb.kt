@@ -36,7 +36,7 @@ object Rtdb {
         }
 
         private fun loop() {
-            var backoff = 1000L
+            var backoff = 500L
             while (!stopped) {
                 try {
                     val c = URL(url(path)).openConnection() as HttpURLConnection
@@ -45,7 +45,7 @@ object Rtdb {
                     c.connectTimeout = 15000
                     c.readTimeout = 90000
                     if (c.responseCode != 200) throw Exception("sse ${c.responseCode}")
-                    backoff = 1000L
+                    backoff = 500L
                     val opened = System.currentTimeMillis()
                     BufferedReader(InputStreamReader(c.inputStream)).use { r ->
                         var event = ""
@@ -66,7 +66,7 @@ object Rtdb {
                 } catch (_: Exception) {
                     if (stopped) return
                     try { Thread.sleep(backoff) } catch (_: InterruptedException) {}
-                    backoff = (backoff * 2).coerceAtMost(30_000L)
+                    backoff = (backoff * 2).coerceAtMost(3_000L)
                 }
             }
         }

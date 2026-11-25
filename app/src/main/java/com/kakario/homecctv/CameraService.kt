@@ -142,8 +142,8 @@ class CameraService : Service() {
             }
         }) ?: throw Exception("pc")
         pc = conn
-        Rtc.setRemote(conn, Rtc.fromJson(offer))
         startMedia()
+        Rtc.setRemote(conn, Rtc.fromJson(offer))
         for (t in conn.transceivers) {
             when (t.mediaType) {
                 MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO -> {
